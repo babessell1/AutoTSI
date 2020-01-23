@@ -1,0 +1,31 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+time = []
+distance = []
+# organize ubh data
+handle = open("Data/test1.ubh", 'r+')
+handle.write("[STOP]\n[STOP]")
+prevLine = ""
+readScan = False
+for line in handle:
+    thisLine = line.strip()
+    if prevLine == "[timestamp]":
+        time.append(int(thisLine))
+    if prevLine == "[scan]":
+        readScan = True
+        scanDat = ''
+    if readScan and thisLine.startswith('['):
+        readScan = False
+        addScan = scanDat.split(';')
+        addScan = [int(i) for i in addScan]
+        distance.append(addScan)
+    if readScan:
+        scanDat += thisLine
+    prevLine = thisLine
+
+handle.close()
+print(time)
+print(distance[0],distance[-1])
+print(len(distance))
+print(len(time))

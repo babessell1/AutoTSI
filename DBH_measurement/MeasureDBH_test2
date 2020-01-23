@@ -1,0 +1,126 @@
+from dbh.urgtools import *
+import xlwings as xw
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from matplotlib.ticker import AutoMinorLocator, FormatStrFormatter
+
+treeDic = pd.DataFrame(columns=['timestep', 'Coordinates', 'DBH', 'Species',
+                                'Track', 'Timestamp'])
+
+time, logtime, distance = urgExtract('Data/test12.ubh')
+
+
+stepStart, stepEnd, maxDist, minRatio, maxRatio, noiseLim, minDiam, maxDiam, direction, trackErrLim = \
+180, 900, 2000, 5*1440, 150*1500, 50, 25, 350, 'left', 0.01
+
+timeStart, timeStop = 608, 1402
+dbhList, dbhList1, dbhList2, dbhList3 = [], [], [], []
+testcnt = 0
+totTime = len(time)
+timeSeg = range(totTime)
+objcnt = 0
+for i in timeSeg[timeStart:timeStop]:
+    testcnt += 1
+    if testcnt % 50 == 0: print(str("{0:.1f}".format(100*testcnt/totTime))+"%")
+    if  dbhList2:
+        dbhList3, centerDistList3, centerStepList3 = dbhList1, centerDistList1, centerStepList1
+    else:
+        dbhList3, centerDistList3, centerStepList3 = [], [], []
+
+    if  dbhList1:
+        dbhList2, centerDistList2, centerStepList2 = dbhList1, centerDistList1, centerStepList1
+    else:
+        dbhList2, centerDistList2, centerStepList2 = [], [], []
+
+    if  dbhList:
+        dbhList1, centerDistList1, centerStepList1 = dbhList, centerDistList, centerStepList
+    else:
+        dbhList1, centerDistList1, centerStepList1 = [], [], []
+
+    stepsList, distList, dbhList, centerDistList, centerStepList = calcTree(
+                        distance[i], stepStart, stepEnd, maxDist, minRatio, maxRatio, noiseLim, minDiam, maxDiam)
+    objcnt += len(dbhList)
+    lst0, lst1, lst2, lst3, isNew = treeTrack(dbhList, centerDistList, centerStepList,
+                                            dbhList1, centerDistList1, centerStepList1,
+                                            dbhList2, centerDistList2, centerStepList2,
+                                            dbhList3, centerDistList3, centerStepList3,
+                                            direction, trackErrLim)
+
+    for j in range(len(lst0)):
+        newEntry = pd.DataFrame(np.array([[i, np.nan, dbhList[j]*0.0393701, 'unknown', isNew[j], logtime[i]]]), columns=['timestep', 'Coordinates', 'DBH', 'Species', 'Track', 'Timestamp'])
+        treeDic = pd.concat([treeDic, newEntry], ignore_index=True)
+
+
+
+
+wb = xw.Book('outData.xlsx')
+sht = wb.sheets['Sheet1']
+sht.range('A1').value = treeDic
+
+def histplot(df, col, ylst):
+    plt.rcParams["axes.labelsize"] = 50
+    fig = sns.distplot(df.DBH.apply(pd.to_numeric,errors='coerce'), bins=100, color=col);
+    fig.set(xlim=(0))
+    plt.rcParams.update({'font.size' : 50})
+    #fig.set_title(title);
+    fig.xaxis.set_minor_locator(AutoMinorLocator(4))
+    fig.xaxis.set_minor_formatter(FormatStrFormatter('%.1f'))
+    #fig.annotate('Cup', xy=(2.625, ylst[0]), xytext=(2.625, ylst[0]+0.03), arrowprops=dict(facecolor='black', shrink=0.05));
+    #fig.annotate('Bottle', xy=(4.5, ylst[1]), xytext=(4.5, ylst[1]+0.03), arrowprops=dict(facecolor='black', shrink=0.05));
+    #fig.annotate('Can', xy=(6.0, ylst[2]), xytext=(6.0, ylst[2]+0.03), arrowprops=dict(facecolor='black', shrink=0.05));
+    #fig.annotate('Pail', xy=(10.0, ylst[3]), xytext=(10.4, ylst[3]+0.01), arrowprops=dict(facecolor='black', shrink=0.05));
+    #fig.annotate('Bucket', xy=(11.625, ylst[4]), xytext=(11.625, ylst[4]+0.03), arrowprops=dict(facecolor='black', shrink=0.05));
+    return fig
+
+print(objcnt)
+
+sns.set(font_scale = 20)
+sns.set_style("darkgrid")
+sns.set(rc={'figure.figsize':(40, 28)})
+props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+
+title = "Before Post-Filtering"
+y1 = [0.17, 0.19, 0.13, 0.425, 0.051]
+df1 = treeDic
+fig1 = histplot(df1, 'seagreen', y1)
+textstr = "Total Values: "+str(len(df1.index))
+fig1.text(0.05, 0.95, textstr, transform=fig1.transAxes, fontsize=70,
+        verticalalignment='top', bbox=props)
+fig1.get_figure().savefig('figure1.png')
+plt.show()
+
+title = "DBH Distribution - Low Tracking Score"
+y2 = [0.23, 0.28, 0.193, 0.51, 0.103]
+df2 = df1[df1.Track != '0']
+fig2 = histplot(df2, 'royalblue', y2)
+textstr = "Total Values: "+str(len(df2.index))
+fig2.text(0.05, 0.95, textstr, transform=fig2.transAxes, fontsize=70,
+        verticalalignment='top', bbox=props)
+fig2.get_figure().savefig('figure2.png')
+plt.show()
+
+title = "DBH Distribution - Mid Tracking Score"
+y3 = [0.22, 0.4, 0.177, 0.617, 0.217]
+df3 = df2[df2.Track != '1']
+fig3 = histplot(df3, 'mediumorchid', y3)
+textstr = "Total Values: "+str(len(df3.index))
+fig3.text(0.05, 0.95, textstr, transform=fig3.transAxes, fontsize=70,
+        verticalalignment='top', bbox=props)
+fig3.get_figure().savefig('figure3.png')
+plt.show()
+
+title = "DBH Distribution - High Tracking Score"
+y4 = [0.584, 0.23, 0.23, 0.699, 0.348]
+df4 = df3[df3.Track != '2']
+fig4 = histplot(df4, 'crimson', y4)
+textstr = "Total Values: "+str(len(df4.index))
+fig4.text(0.05, 0.95, textstr, transform=fig4.transAxes, fontsize=70,
+        verticalalignment='top', bbox=props)
+fig4.get_figure().savefig('figure4.png')
+plt.show()
+
+
+
+#print("Center Steps: "+str(centerStepList)+"\n\nCenter Distances: "
+#+str(centerDistList)+"\n\nDBH: "+ str(dbhList))
